@@ -2,6 +2,7 @@ import { storage } from "./storage"
 import { GenerationModel, AspectRatio, ImageSize, DalleImageData, ModelType } from "@/types"
 import { toast } from "sonner"
 import { AlertCircle } from "lucide-react"
+import { connectionManager } from "./connection-manager"
 
 export interface GenerateImageRequest {
   prompt: string
@@ -66,11 +67,14 @@ export const api = {
 
     const requestUrl = buildRequestUrl(config.baseUrl, endpoint);
 
-    const response = await fetch(requestUrl, {
+    // 使用连接管理器的重试机制
+    const response = await connectionManager.fetchWithRetry(requestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.key}`
+        'Authorization': `Bearer ${config.key}`,
+        'Keep-Alive': 'timeout=300',
+        'Connection': 'keep-alive'
       },
       body: JSON.stringify({
         model: request.model,
@@ -79,7 +83,7 @@ export const api = {
         n: request.n || 1,
         quality: request.quality
       })
-    })
+    }, 3, 2000) // 最多重试3次，延迟2秒
 
     if (!response.ok) {
       const errorData = await response.json()
@@ -190,11 +194,14 @@ export const api = {
 
     const requestUrl = buildRequestUrl(config.baseUrl, `/v1beta/models/${request.model}:generateContent`)
 
-    const response = await fetch(requestUrl, {
+    // 使用连接管理器的重试机制，Gemini可能需要更长时间
+    const response = await connectionManager.fetchWithRetry(requestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.key}`
+        'Authorization': `Bearer ${config.key}`,
+        'Keep-Alive': 'timeout=300',
+        'Connection': 'keep-alive'
       },
       body: JSON.stringify({
         contents: [
@@ -210,7 +217,7 @@ export const api = {
           responseModalities: ["TEXT", "IMAGE"]
         }
       })
-    })
+    }, 5, 3000) // Gemini可能需要更多重试，最多5次，延迟3秒
 
     if (!response.ok) {
       const errorData = await response.json()
@@ -424,78 +431,26 @@ export const api = {
 
     const requestUrl = buildRequestUrl(config.baseUrl, endpoint);
 
-    const response = await fetch(requestUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.key}`
+    // 使用连接管理器处理长时间流式请求
+    await connectionManager.handleLongStreamRequest(
+      requestUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.key}`,
+          'Keep-Alive': 'timeout=300',
+          'Connection': 'keep-alive'
+        },
+        body: JSON.stringify(requestBody)
       },
-      body: JSON.stringify(requestBody)
-    })
+      (chunk: string) => {
+        if (!chunk || chunk === 'data: [DONE]') return
 
-    if (!response.ok) {
-      try {
-        const errorData = await response.json()
-        const errorMessage = errorData.message || errorData.error?.message || '生成图片失败'
-        const errorCode = errorData.code || errorData.error?.code
-        const fullError = `${errorMessage}${errorCode ? `\n错误代码: ${errorCode}` : ''}`
-        callbacks.onError(fullError)
-        showErrorToast(fullError)
-      } catch {
-        const error = '生成图片失败'
-        callbacks.onError(error)
-        showErrorToast(error)
-      }
-      return
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) {
-      callbacks.onError('读取响应失败')
-      return
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          if (!trimmedLine || trimmedLine === 'data: [DONE]') continue
-
-          try {
-            const jsonStr = trimmedLine.replace(/^data: /, '')
-            const data = JSON.parse(jsonStr)
-
-            if (data.choices?.[0]?.delta?.content) {
-              const content = data.choices[0].delta.content
-              callbacks.onMessage(content)
-
-              const urlMatch = content.match(/\[.*?\]\((.*?)\)/)
-              if (urlMatch && urlMatch[1]) {
-                callbacks.onComplete(urlMatch[1])
-                return
-              }
-            }
-          } catch (e) {
-            console.warn('解析数据行失败:', e)
-          }
-        }
-      }
-
-      if (buffer.trim()) {
         try {
-          const jsonStr = buffer.trim().replace(/^data: /, '')
+          const jsonStr = chunk.replace(/^data: /, '')
           const data = JSON.parse(jsonStr)
+
           if (data.choices?.[0]?.delta?.content) {
             const content = data.choices[0].delta.content
             callbacks.onMessage(content)
@@ -506,13 +461,18 @@ export const api = {
             }
           }
         } catch (e) {
-          console.warn('解析最后的数据失败:', e)
+          console.warn('解析数据行失败:', e)
         }
+      },
+      () => {
+        // 流完成，但如果没有调用 onComplete，这里可以做一些清理工作
+        console.log('Stream completed')
+      },
+      (error: Error) => {
+        const errorMessage = error.message || '处理响应数据失败'
+        callbacks.onError(errorMessage)
+        showErrorToast(errorMessage)
       }
-    } catch (error) {
-      console.error('处理流数据失败:', error)
-      callbacks.onError('处理响应数据失败')
-    }
-    reader.releaseLock()
+    )
   }
-} 
+}

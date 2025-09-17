@@ -4,10 +4,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Info, Download, Edit, Settings, History, Image as ImageIcon, MessageSquare, Upload, ChevronLeft, ChevronRight, Maximize2, Github, Globe } from "lucide-react"
+import { Download, Edit, Settings, Image as ImageIcon, MessageSquare, Upload, ChevronLeft, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import { ApiKeyDialog } from "@/components/api-key-dialog"
-import { HistoryDialog } from "@/components/history-dialog"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { api } from "@/lib/api"
 import { GenerationModel, AspectRatio, ImageSize, DalleImageData, ModelType } from "@/types"
@@ -20,6 +19,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { CustomModelDialog } from "@/components/custom-model-dialog"
+import { ConnectionStatus } from "@/components/connection-status"
 import { toast } from "sonner"
 
 export default function Home() {
@@ -32,7 +32,6 @@ export default function Home() {
 
 function HomeContent() {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false)
-  const [showHistoryDialog, setShowHistoryDialog] = useState(false)
   const [showCustomModelDialog, setShowCustomModelDialog] = useState(false)
   const [prompt, setPrompt] = useState("")
   const [model, setModel] = useState<GenerationModel>("sora_image")
@@ -92,7 +91,7 @@ function HomeContent() {
       setModelType(ModelType.DALLE)
       return
     }
-    if (model === 'sora_image' || model === 'gpt_4o_image') {
+    if (model === 'sora_image' || model === 'gpt-4o-image' || model === 'flux-kontext-pro' || model === 'flux-kontext-max' || model === 'veo3') {
       setModelType(ModelType.OPENAI)
       return
     }
@@ -207,16 +206,6 @@ function HomeContent() {
             
             setGeneratedImages(imageUrls)
             
-            if (imageUrls.length > 0) {
-              storage.addToHistory({
-                id: uuidv4(),
-                prompt: finalPrompt,
-                url: imageUrls[0],
-                model,
-                createdAt: new Date().toISOString(),
-                aspectRatio: '1:1'
-              })
-            }
           } catch (err) {
             if (err instanceof Error) {
               setError(err.message)
@@ -246,16 +235,6 @@ function HomeContent() {
             
             setGeneratedImages(imageUrls)
             
-            if (imageUrls.length > 0) {
-              storage.addToHistory({
-                id: uuidv4(),
-                prompt: finalPrompt,
-                url: imageUrls[0],
-                model,
-                createdAt: new Date().toISOString(),
-                aspectRatio: '1:1'
-              })
-            }
           } catch (err) {
             if (err instanceof Error) {
               setError(err.message)
@@ -295,16 +274,6 @@ function HomeContent() {
             
             setGeneratedImages(imageUrls)
             
-            if (imageUrls.length > 0) {
-              storage.addToHistory({
-                id: uuidv4(),
-                prompt: finalPrompt,
-                url: imageUrls[0],
-                model,
-                createdAt: new Date().toISOString(),
-                aspectRatio: '1:1'
-              })
-            }
           } catch (err) {
             if (err instanceof Error) {
               setError(err.message)
@@ -334,17 +303,6 @@ function HomeContent() {
             }).filter(url => url !== ''); // 过滤掉空链接
             
             setGeneratedImages(imageUrls)
-            
-            if (imageUrls.length > 0) {
-              storage.addToHistory({
-                id: uuidv4(),
-                prompt: finalPrompt,
-                url: imageUrls[0],
-                model,
-                createdAt: new Date().toISOString(),
-                aspectRatio: '1:1'
-              })
-            }
           } catch (err) {
             if (err instanceof Error) {
               setError(err.message)
@@ -373,14 +331,6 @@ function HomeContent() {
             },
             onComplete: (imageUrl) => {
               setGeneratedImages([imageUrl])
-              storage.addToHistory({
-                id: uuidv4(),
-                prompt: finalPrompt,
-                url: imageUrl,
-                model,
-                createdAt: new Date().toISOString(),
-                aspectRatio
-              })
             },
             onError: (error) => {
               // 处理流式 API 错误
@@ -471,14 +421,6 @@ function HomeContent() {
                   >
                     <Settings className="h-4 w-4 mr-2" />
                     密钥设置
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setShowHistoryDialog(true)}
-                  >
-                    <History className="h-4 w-4 mr-2" />
-                    历史记录
                   </Button>
                 </div>
 
@@ -603,10 +545,13 @@ function HomeContent() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="sora_image">GPT Sora_Image 模型</SelectItem>
-                        <SelectItem value="gpt_4o_image">GPT 4o_Image 模型</SelectItem>
+                        <SelectItem value="gpt-4o-image">GPT 4o_Image 模型</SelectItem>
                         <SelectItem value="gpt-image-1">GPT Image 1 模型</SelectItem>
                         <SelectItem value="dall-e-3">DALL-E 3 模型</SelectItem>
-                        <SelectItem value="gemini-2.5-flash-image-preview">Gemini 2.5 模型</SelectItem>
+                        <SelectItem value="gemini-2.5-flash-image-preview">Nano-banana</SelectItem>
+                        <SelectItem value="flux-kontext-pro">Flux Pro 模型</SelectItem>
+                        <SelectItem value="flux-kontext-max">Flux Max 模型</SelectItem>
+                        <SelectItem value="veo3">Veo3 模型</SelectItem>
                         
                         {/* 显示自定义模型 */}
                         {storage.getCustomModels().length > 0 && (
@@ -766,6 +711,10 @@ function HomeContent() {
               </div>
             </CardHeader>
             <CardContent className="flex flex-col items-stretch justify-start p-6 h-full">
+              <ConnectionStatus 
+                isGenerating={isGenerating} 
+                onRetry={() => handleGenerate()} 
+              />
               {error ? (
                 <div className="text-center text-red-500 whitespace-pre-line">
                   <p>{error}</p>
@@ -773,9 +722,17 @@ function HomeContent() {
               ) : (
                 <div className="w-full h-full flex flex-col gap-4">
                   {(model === 'dall-e-3' || model === 'gpt-image-1' || modelType === ModelType.DALLE) ? (
-                    <div className="text-center text-gray-400">
-                      {isGenerating ? "正在生成中..." : generatedImages.length === 0 ? "等待生成..." : null}
-                    </div>
+                    (isGenerating || generatedImages.length === 0) && (
+                      <div className="text-center text-gray-400">
+                        {isGenerating ? "正在生成中..." : "等待生成..."}
+                      </div>
+                    )
+                  ) : modelType === ModelType.GEMINI ? (
+                    (isGenerating || generatedImages.length === 0) && (
+                      <div className="text-center text-gray-400">
+                        {isGenerating ? "正在生成中..." : "等待生成..."}
+                      </div>
+                    )
                   ) : (
                     <div 
                       ref={contentRef}
@@ -861,14 +818,6 @@ function HomeContent() {
       <ApiKeyDialog 
         open={showApiKeyDialog} 
         onOpenChange={setShowApiKeyDialog} 
-      />
-      <HistoryDialog 
-        open={showHistoryDialog} 
-        onOpenChange={setShowHistoryDialog}
-        onEditImage={(imageUrl) => {
-          setIsImageToImage(true)
-          setSourceImages([imageUrl])
-        }}
       />
       <CustomModelDialog
         open={showCustomModelDialog}
