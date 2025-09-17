@@ -450,30 +450,6 @@ function HomeContent() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* 顶部提示栏 */}
-      <div className="w-full bg-blue-50 p-4 relative">
-        <div className="container mx-auto flex justify-center text-sm text-blue-700">
-          <Info className="h-4 w-4 mr-2" />
-          <p>数据安全提示：所有生成的图片和历史记录仅保存在本地浏览器中。请及时下载并备份重要图片。使用隐私模式或更换设备会导致数据丢失无法恢复。</p>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="absolute right-4 top-1/2 -translate-y-1/2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2"
-          onClick={() => window.open('https://github.com/HappyDongD/magic_image', '_blank')}
-        >
-          <Github className="h-5 w-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="absolute right-14 top-1/2 -translate-y-1/2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2"
-          onClick={() => window.open('https://mj.do', '_blank')}
-          title="访问 mj.do"
-        >
-          <Globe className="h-5 w-5" />
-        </Button>
-      </div>
 
       {/* 标题区域 */}
       <div className="text-center py-8">
@@ -900,17 +876,6 @@ function HomeContent() {
         onSelectModel={handleSelectCustomModel}
       />
 
-      <footer className="w-full py-4 text-center text-sm text-gray-500">
-        <a 
-          href="https://github.com/HappyDongD/magic_image" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="hover:text-primary transition-colors inline-flex items-center gap-2"
-        >
-          <Github className="h-4 w-4" />
-          访问 GitHub 项目主页
-        </a>
-      </footer>
 
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
         <DialogContent className="max-w-4xl">
